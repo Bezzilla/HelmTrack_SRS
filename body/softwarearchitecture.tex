@@ -4,6 +4,12 @@
 \section{System Architecture Overview}
 \label{section:architecture-overview}
 
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=\textwidth]{System_Architecture_Overview.drawio.png}
+    \caption{HelmTrack System Architecture Overview}
+\end{figure}
+
 HelmTrack is structured as a four-layer pipeline that processes video input from end to end and produces structured violation records without human intervention. The four layers are the Ingestion Layer, Core AI Engine, OCR Pipeline, and Application Layer.
 
 The \textbf{Ingestion Layer} handles video input from CCTV streams via RTSP or MP4 files. A Frame Scheduler controls the sampling rate, extracting frames at a configured interval to balance detection coverage against processing load.
@@ -16,6 +22,12 @@ The \textbf{Application Layer} stores each confirmed violation as a structured r
 
 \section{Software Design}
 \label{section:software-design}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{Detect_and_Log_Violation_Sequence_Diagram.drawio.png}
+    \caption{Sequence Diagram: Detect and Log a Helmet Violation}
+\end{figure}
 
 The runtime behavior of HelmTrack follows a sequential pipeline triggered on each processed video frame. The core flow is as follows:
 
