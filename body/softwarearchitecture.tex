@@ -3,40 +3,62 @@
 
 \section{System Architecture Overview}
 \label{section:architecture-overview}
-<TIP: Provide a high-level description of your system's structure.
-Include either a Domain Model (to describe core business concepts
-and their relationships)
-or a Design Class Diagram (to describe how your code is organized
-into classes and packages),
-whichever best communicates your design.
-Accompany your diagram with a short paragraph explaining the key
-components and how they interact. />
+
+HelmTrack is structured as a four-layer pipeline that processes video input from end to end and produces structured violation records without human intervention. The four layers are the Ingestion Layer, Core AI Engine, OCR Pipeline, and Application Layer.
+
+The \textbf{Ingestion Layer} handles video input from CCTV streams via RTSP or MP4 files. A Frame Scheduler controls the sampling rate, extracting frames at a configured interval to balance detection coverage against processing load.
+
+The \textbf{Core AI Engine} is the central processing stage. A Detection Service runs a fine-tuned YOLOv8 model on GPU to detect four object classes in each frame: motorcycles, riders, helmets, and license plates. A Tracking and Association module (DeepSORT / IoU matching) links detections across frames and pairs each rider with the nearest motorcycle and license plate using spatial overlap logic. A Violation Decision module then applies helmet check logic to determine whether a rider is not wearing a helmet. If a violation is confirmed, the OCR pipeline is triggered.
+
+The \textbf{OCR Pipeline} is conditionally activated only when a violation is detected. A Plate Cropper extracts the license plate region from the frame. An OCR Service (EasyOCR / Tesseract) reads the alphanumeric characters from the cropped image. A Post-Processor applies regex validation to enforce expected license plate formats and aggregates results across consecutive frames using majority voting to eliminate reading errors.
+
+The \textbf{Application Layer} stores each confirmed violation as a structured record in a database, including the full frame image, cropped plate image, plate number, timestamp, camera ID, and confidence score. An API Server (REST / GraphQL) exposes this data to a Dashboard UI where officers can review, filter, and export violation records.
 
 \section{Software Design}
 \label{section:software-design}
-<TIP: Describe the runtime behavior of your system.
-Include a Sequence Diagram for your most important use cases.
-Focus on scenarios with non-trivial interactions between components.
-If your project involves a novel algorithm,
-describe it here and explain why you designed it this way. />
+
+The runtime behavior of HelmTrack follows a sequential pipeline triggered on each processed video frame. The core flow is as follows:
+
+\begin{enumerate}[leftmargin=80pt]
+    \item The Frame Scheduler extracts a frame from the CCTV stream at the configured sampling rate.
+    \item The YOLOv8 Detection Service processes the frame and returns bounding boxes for all detected objects (motorcycles, riders, helmets, license plates) with class labels and confidence scores.
+    \item The Tracking and Association module applies DeepSORT tracking to maintain object identity across frames and uses IoU-based spatial matching to link each rider to their motorcycle and nearest license plate.
+    \item The Violation Decision module checks whether a helmet bounding box is associated with each rider. If no helmet is found, the frame is flagged as a violation.
+    \item The OCR Pipeline is triggered: the license plate region is cropped, preprocessed (grayscale, thresholding, perspective correction), and passed to EasyOCR. The result is validated with regex and confirmed via majority voting across multiple frames.
+    \item The confirmed violation record is written to the database and becomes available for review on the dashboard.
+\end{enumerate}
 
 \section{AI and Data Design}
 \label{section:ai-data-design}
 
 \subsection{Data Sources and Collection}
-<TIP: Describe where your data comes from. Is it collected from users,
-scraped from the web, sourced from a public dataset, or
-provided by an external API?
-Explain how much data you have or plan to collect,
-and any challenges you anticipate in obtaining it.
-Explain how data is cleaned, transformed, or prepared before use. />
+
+HelmTrack's detection model requires labeled training data covering four object classes: motorcycles, riders, helmets, and license plates. Data is sourced from three categories.
+
+\textbf{Public Datasets} are used for baseline model training. Sources include Kaggle and Google Open Images, which provide labeled images of motorcycles, helmets, and persons under varied lighting and road conditions.
+
+\textbf{Self-Collected Data} consists of local CCTV footage captured from university roads and busy intersections. This data captures real-world Thai traffic conditions, including Thai license plate formats, local road markings, and typical camera angles, which are not well represented in international datasets.
+
+\textbf{ANPR Datasets} containing Thai license plate samples are used specifically for training and validating the OCR recognition stage.
+
+For collection strategy, frames are sampled every 0.5 to 1.0 seconds from video footage to reduce redundancy while retaining motion diversity. Bounding box annotation is performed manually using CVAT or LabelImg. Data augmentation techniques including motion blur, Gaussian noise, and brightness and contrast adjustments are applied to improve model robustness to real-world variation.
+
 \subsection{Model Design}
-<TIP: Describe the AI model or external AI service you plan to use.
-Explain why you chose it over alternatives.
-This can connect back to your competitor or literature review in Chapter 2.
-If you are training your own model, describe the architecture and
-training approach. If you are using a third-party model or API,
-describe how it is integrated into your system and any prompt design
-or fine-tuning involved. />
+
+HelmTrack uses two AI models serving distinct roles in the pipeline.
+
+\textbf{YOLOv8} (Ultralytics) \cite{paper:yolov8} serves as the object detection backbone. It is fine-tuned on the collected dataset to detect four classes: motorcycle, rider, helmet, and license plate. YOLOv8 was chosen over alternatives such as Faster R-CNN or SSD because of its single-pass architecture, which enables real-time inference at 30 or more frames per second on GPU hardware. This speed is essential for processing live CCTV streams without latency. YOLOv8 also benefits from a strong open-source community, pre-trained weights on large datasets, and straightforward integration with Python and OpenCV.
+
+\textbf{EasyOCR / Tesseract} serves as the text recognition engine for license plate reading. Once a violation is detected and the plate region is cropped and preprocessed, EasyOCR extracts the alphanumeric characters. A regex post-processor validates the output against expected Thai license plate patterns. Majority voting across consecutive frames is applied to eliminate flicker and reduce single-frame reading errors.
+
 \subsection{Evaluation}
-<TIP: Describe the metrics you plan to use to evaluate your AI model. />
+
+HelmTrack will be evaluated across four dimensions.
+
+\textbf{Object Detection} is measured using mean Average Precision at IoU 0.5 (mAP@0.5), per-class precision and recall for rider, helmet, and license plate, and Intersection over Union (IoU) for bounding box accuracy.
+
+\textbf{Violation Logic} is evaluated using classification accuracy for helmet versus no-helmet decisions, F1-score to balance false positives and false negatives, and association accuracy measuring correct rider-to-motorcycle pairing.
+
+\textbf{OCR Performance} is assessed using Character Error Rate (CER) representing the percentage of incorrectly recognized characters, full plate accuracy measuring exact string matches, and Levenshtein edit distance for near-miss analysis.
+
+\textbf{System Performance} is measured by frames per second (FPS) on target hardware, end-to-end latency from frame input to database write, and false positive rate representing the proportion of helmeted riders incorrectly flagged as violators.

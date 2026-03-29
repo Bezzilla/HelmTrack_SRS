@@ -23,11 +23,13 @@
 % add macro to substitute for empty vars
 \def \usevar#1{\ifx\empty#1 \empty\else #1\fi}
 
+\raggedbottom  % prevent vertical stretching between sections
+
 % environment for indented body text under subsections
 \newenvironment{subsecbody}{%
-    \par\setlength{\leftskip}{40pt}\setlength{\parindent}{40pt}%
+    \setlength{\leftskip}{40pt}\setlength{\parindent}{40pt}\vspace{-\parskip}%
 }{%
-    \par\setlength{\leftskip}{0pt}\setlength{\parindent}{40pt}%
+    \par\vspace{-\parskip}\setlength{\leftskip}{0pt}\setlength{\parindent}{40pt}%
 }
 
 
